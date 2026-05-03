@@ -6,14 +6,19 @@ const SYSTEM_PROMPT = require("../middleware/systemPrompt");
 
 const router = express.Router();
 
-const client = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-  defaultHeaders: {
-    "HTTP-Referer": process.env.FRONTEND_URL,
-    "X-Title": "CCMS Hackathon Project",
-  },
-});
+// ✅ FIX: Do NOT create the OpenAI client at module load time.
+// process.env values are not yet populated when this file is first require()'d.
+// Instead, create the client lazily inside the route handler.
+function getClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    defaultHeaders: {
+      "HTTP-Referer": process.env.FRONTEND_URL,
+      "X-Title": "CCMS Hackathon Project",
+    },
+  });
+}
 
 /**
  * Extract text from PDF using pdfjs
@@ -41,7 +46,6 @@ async function extractTextFromPDF(data) {
 router.post("/analyze", async (req, res) => {
   const { base64, filename } = req.body;
 
-  // ✅ Validate input
   if (!base64) {
     return res.status(400).json({
       error: "No PDF data provided. Send base64 field.",
@@ -57,11 +61,11 @@ router.post("/analyze", async (req, res) => {
   try {
     console.log(`📄 Analyzing judgment: ${filename || "unknown.pdf"}`);
 
-    // ✅ Step 1: base64 → Uint8Array
+    // Step 1: base64 → Uint8Array
     const buffer = Buffer.from(base64, "base64");
     const uint8Array = new Uint8Array(buffer);
 
-    // ✅ Step 2: Extract text
+    // Step 2: Extract text
     const text = await extractTextFromPDF(uint8Array);
 
     if (!text || text.trim().length < 50) {
@@ -70,12 +74,14 @@ router.post("/analyze", async (req, res) => {
       });
     }
 
-    // ⚠️ Prevent token overflow
+    // Prevent token overflow
     const trimmedText = text.slice(0, 12000);
 
-    // ✅ Step 3: Call OpenRouter
+    // Step 3: Call OpenRouter — client created HERE (env is loaded by now)
+    const client = getClient();
+
     const response = await client.chat.completions.create({
-      model: "openai/gpt-4o-mini", // or "mistralai/mistral-7b-instruct"
+      model: "openai/gpt-4o-mini",
       temperature: 0.2,
       messages: [
         {
@@ -107,7 +113,7 @@ ${trimmedText}
 
     const raw = response.choices[0].message.content;
 
-    // ✅ Step 4: Clean + Parse JSON safely
+    // Step 4: Clean + Parse JSON safely
     const clean = raw
       .replace(/```json/g, "")
       .replace(/```/g, "")
@@ -134,7 +140,6 @@ ${trimmedText}
   } catch (err) {
     console.error("❌ Analysis error:", err);
 
-    // 🔁 Demo-safe fallback
     if (err.status === 429) {
       return res.json({
         success: true,
