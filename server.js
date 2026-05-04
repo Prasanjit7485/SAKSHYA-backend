@@ -12,8 +12,12 @@ app.get("/", (req, res) => {
 });
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: [
+    "http://localhost:5173",
+    "https://sakshya7.vercel.app"
+  ],
   methods: ["GET", "POST"],
+  credentials: true
 }));
 app.use(express.json({ limit: "20mb" }));
 
