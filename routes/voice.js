@@ -137,37 +137,17 @@ router.post("/summary", verifyJWT, async (req, res) => {
         console.log("✅ Hindi translation done. Length:", script.length);
       } catch (trErr) {
         console.warn("⚠️ Hindi translation failed, falling back to English:", trErr.message);
-        // Fall back to English silently
       }
     }
 
-    const openai = getOpenAIClient();
-
-    const mp3Response = await openai.audio.speech.create({
-      model: "tts-1",
-      // "nova" handles Hindi characters better than "alloy"
-      voice: lang === "hi" ? "nova" : "alloy",
-      input: script,
-      response_format: "mp3",
-      speed: lang === "hi" ? 0.9 : 0.95, // slightly slower for Hindi
-    });
-
-    const audioBuffer = Buffer.from(await mp3Response.arrayBuffer());
-
-    res.set({
-      "Content-Type":   "audio/mpeg",
-      "Content-Length": audioBuffer.length,
-      "Cache-Control":  "no-store",
-    });
-
-    res.send(audioBuffer);
-    console.log(`✅ Voice summary sent (${lang}), bytes: ${audioBuffer.length}`);
+    res.json({ script });
+    console.log(`✅ Voice script sent (${lang})`);
 
   } catch (err) {
     console.error("❌ TTS error:", err);
-    if (err.status === 401) return res.status(401).json({ error: "Invalid OPENAI_API_KEY." });
-    if (err.status === 429) return res.status(429).json({ error: "OpenAI rate limit hit. Try again shortly." });
-    return res.status(500).json({ error: err.message || "Voice generation failed." });
+    if (err.status === 401) return res.status(401).json({ error: "Invalid API Key." });
+    if (err.status === 429) return res.status(429).json({ error: "Rate limit hit. Try again shortly." });
+    return res.status(500).json({ error: err.message || "Voice script generation failed." });
   }
 });
 
